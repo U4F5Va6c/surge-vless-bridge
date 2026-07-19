@@ -211,6 +211,9 @@ export const writeExampleConfig = async ({
     surgeConfigPath: defaults.surgeConfigPath,
     policyGroupName: defaults.policyGroupName,
     portStart: defaults.portStart,
+    // DoH avoids Surge's enhanced-mode Fake-IP (198.18.x.x) so the real server
+    // IP is written into each external proxy's `addresses=`.
+    addressResolver: { strategy: 'doh' },
   };
 
   await writeTextFile(resolvedConfigPath, `${JSON.stringify(example, null, 2)}\n`);

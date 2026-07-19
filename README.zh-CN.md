@@ -1,165 +1,175 @@
-# surge-vless-bridge
+# surge-vless-bridge（anytls 增强版）
 
-[![npm version](https://img.shields.io/npm/v/surge-vless-bridge.svg)](https://www.npmjs.com/package/surge-vless-bridge)
-[![npm downloads](https://img.shields.io/npm/dm/surge-vless-bridge.svg)](https://www.npmjs.com/package/surge-vless-bridge)
+[English README](./README.md) · [相对上游的改动](./MODIFICATIONS.md)
 
-[English README](./README.md)
+一个 Node.js CLI，把 **Clash/mihomo（或旧版 base64）订阅**转换成 Surge Mac 可用的代理：
 
-基于 Node.js 的 CLI，把 VLESS 订阅转换为 Surge Mac 可用的 `external` 代理节点，底层由本地 `sing-box` 承接。
+- **vless（reality）** 节点 → 生成本地 `sing-box` 配置，作为 Surge `external` 代理接入（Surge Mac 不原生支持 vless）。
+- **anytls** 节点 → 直接写成 Surge **原生 `anytls` 代理**（需 Surge Mac 6.4.3+ / iOS 5.17.0+）。
+- **多个订阅**会合并进同一个策略组，重名节点自动去重（追加 ` 2`/` 3` 后缀）。
 
-Surge Mac 不原生支持 VLESS。该工具自动拉取订阅、为每个节点生成 `sing-box` 配置、并保持 Surge 配置同步更新，让你继续使用 Surge 的规则、策略组和面板来使用 VLESS 节点。
+它会拉取订阅、生成各节点产物、备份 Surge 配置，并重写一段受管的
+`# vless start … # vless end` 区块与策略组——让所有节点都能通过 Surge 的规则、
+策略组和面板使用。
+
+> 本项目 fork 自 [`chen86860/surge-vless-bridge`](https://github.com/chen86860/surge-vless-bridge)，
+> 增加了 anytls、Clash-YAML 解析与多订阅合并。完整行为差异见
+> [`MODIFICATIONS.md`](./MODIFICATIONS.md)。
 
 ## 前置条件
 
-- 已安装 [sing-box](https://github.com/SagerNet/sing-box)（`brew install sing-box`）
-- Surge Mac 配置文件中包含 `[Proxy]` 和 `[Proxy Group]` 区块
+- **Node.js ≥ 20**
+- 已安装 **[sing-box](https://github.com/SagerNet/sing-box)**（`brew install sing-box`）—— vless 节点需要
+- **Surge Mac 6.4.3+**，配置文件含 `[Proxy]` 与 `[Proxy Group]` 区块（anytls 原生代理需要）
 
 ## 安装
 
+本增强版**未发布到 npm**，直接从仓库安装。该包**零运行时依赖**且已提交预构建的
+`dist/`，因此目标机器**无需构建**：
+
 ```bash
-npm i -g surge-vless-bridge
+git clone <本仓库地址> surge-vless-bridge
+cd surge-vless-bridge
+npm install -g .
 ```
+
+验证：
+
+```bash
+surge-vless-bridge version
+```
+
+> 把整个目录（不含 `node_modules/`）拷到另一台机器再 `npm install -g .` 同样可用
+> ——这正是推荐的多机复用方式。要改源码请看 [本地开发](#本地开发)。
 
 ## 快速开始
 
-**1. 生成配置文件：**
+**1. 生成配置模板**（已自带 DoH 解析配置）：
 
 ```bash
 surge-vless-bridge init
 ```
 
-配置文件写入 `~/.config/surge-vless-bridge/config.json`，命令执行后会打印具体路径。
+配置写入 `~/.config/surge-vless-bridge/config.json` 并打印路径。
 
-**2. 编辑配置文件：**
+**2. 编辑配置** —— 填入订阅与 Surge 配置路径：
 
-```bash
-# 用 init 打印的路径打开文件，例如：
-open ~/.config/surge-vless-bridge/config.json
-```
-
-至少填写以下两个字段：
-
-```json
+```jsonc
 {
-  "subscriptionUrl": "https://your-provider.com/subscription",
-  "surgeConfigPath": "/Users/you/Library/Application Support/Surge/Profiles/MyProfile.conf"
+  "subscriptionUrl": [
+    "https://你的机场/subscribe/token"
+  ],
+  "surgeConfigPath": "/Users/you/Library/Application Support/Surge/Profiles/MyProfile.conf",
+  "policyGroupName": "VLESS",
+  "portStart": 2081,
+  "addressResolver": { "strategy": "doh" }
 }
 ```
 
-- **`subscriptionUrl`**：填入你的 VLESS 订阅地址。
+- **`subscriptionUrl`** —— 可填单个字符串、逗号分隔字符串，或数组（多订阅合并）。
+- **`surgeConfigPath`** —— Surge 配置文件绝对路径。获取方式：菜单栏 Surge 图标 →
+  **切换配置** → **在访达中显示**，或：
+  ```bash
+  ls ~/Library/Application\ Support/Surge/Profiles/
+  ```
 
-- **`surgeConfigPath`**：Surge 配置文件的绝对路径。获取方式：
-  1. 点击 macOS **菜单栏**中的 Surge 图标
-  2. 选择 **切换配置**，在当前使用的配置文件上点击 **在访达中显示**
-  3. 在 Finder 中对该文件按 `⌘ + i`，复制"位置"下的完整路径，拼上文件名填入
-
-  > 也可以通过终端快速查看所有配置文件：
-  >
-  > ```bash
-  > ls ~/Library/Application\ Support/Surge/Profiles/
-  > ```
-
-**3. 执行同步：**
+**3. 同步：**
 
 ```bash
 surge-vless-bridge sync
+# → Synced 15 nodes (3 vless via sing-box, 12 anytls native).
 ```
 
-`sync` 会依次完成：拉取订阅 → 生成 sing-box 配置 → 备份 Surge 配置 → 更新 Surge 配置。
-
-**4. 验证配置是否正常：**
+**4. 在 Surge 中重新加载配置**（或退出重开），让它读到新节点，然后可选检查：
 
 ```bash
 surge-vless-bridge doctor
 ```
 
+## 节点如何分流
+
+| 订阅节点类型          | 产物 |
+| --------------------- | ---- |
+| `vless`（reality/tls）| `outputDir` 下的 `sing-box[<端口>].json` + 一行 Surge `external` 代理（`addresses=` 用 DoH 解析真实 IP） |
+| `anytls`              | 一行 Surge 原生 `名称 = anytls, server, port, password=…, sni=…, skip-cert-verify=true` |
+| 其它（ss/trojan/…）   | 跳过（在 `sync` 摘要里提示数量） |
+
+anytls 没有独立的 sing-box 配置，因此 `sync` 会把它们的行额外记录到
+`<outputDir>/anytls-nodes.json`；`rebuild` 会读取该侧车文件，保证不丢失。
+
 ## 配置文件
 
-由 `init` 创建，默认路径：`~/.config/surge-vless-bridge/config.json`。
-
-```json
-{
-  "subscriptionUrl": "https://example.com/subscription",
-  "surgeConfigPath": "/Users/you/Library/Application Support/Surge/Profiles/Config.conf",
-  "policyGroupName": "VLESS",
-  "portStart": 2081,
-  "addressResolver": {
-    "strategy": "system",
-    "filterSurgeFakeIp": true,
-    "dohEndpoint": "https://1.1.1.1/dns-query",
-    "dnsServers": ["1.1.1.1", "8.8.8.8"]
-  }
-}
-```
+默认路径：`~/.config/surge-vless-bridge/config.json`。
 
 **必填**
 
-| 字段              | 说明                     |
-| ----------------- | ------------------------ |
-| `subscriptionUrl` | VLESS 订阅地址           |
-| `surgeConfigPath` | Surge 配置文件的绝对路径 |
+| 字段              | 说明                                            |
+| ----------------- | ----------------------------------------------- |
+| `subscriptionUrl` | 订阅地址：字符串 / 逗号分隔字符串 / 数组         |
+| `surgeConfigPath` | Surge 配置文件的绝对路径                        |
 
 **选填**
 
-| 字段              | 默认值                                 | 说明                             |
-| ----------------- | -------------------------------------- | -------------------------------- |
-| `policyGroupName` | `"VLESS"`                              | 要写入的 Surge 策略组名称        |
-| `portStart`       | `2081`                                 | 起始本地端口，每个节点依次递增   |
-| `singBoxBinary`   | 自动检测（`which sing-box`）           | `sing-box` 可执行文件路径        |
-| `outputDir`       | `~/.config/surge-vless-bridge/nodes`   | 每个节点的 sing-box 配置保存目录 |
-| `backupDir`       | `~/.config/surge-vless-bridge/backups` | Surge 配置备份目录               |
-| `addressResolver` | 见下方                                 | 为 `addresses=` 解析代理服务器域名 |
+| 字段              | 默认值                                 | 说明                                       |
+| ----------------- | -------------------------------------- | ------------------------------------------ |
+| `policyGroupName` | `"VLESS"`                              | 要写入的 Surge `url-test` 策略组名称       |
+| `portStart`       | `2081`                                 | 起始本地端口，每个 vless 节点依次递增      |
+| `singBoxBinary`   | 自动检测（`which sing-box`）           | `sing-box` 可执行文件路径                  |
+| `outputDir`       | `~/.config/surge-vless-bridge/nodes`   | sing-box 配置与 `anytls-nodes.json` 保存目录 |
+| `backupDir`       | `~/.config/surge-vless-bridge/backups` | Surge 配置备份目录                         |
+| `requestHeaders`  | Clash UA（`clash-verge/v1.7.0`）       | 拉取订阅时使用的请求头                     |
+| `addressResolver` | `{ "strategy": "doh" }`（由 `init` 生成） | 为 `addresses=` 解析代理服务器域名的方式 |
 
 `addressResolver.strategy` 可选：
 
-| 策略     | 说明                                                                             |
-| -------- | -------------------------------------------------------------------------------- |
-| `system` | 使用 Node.js 系统 DNS 解析，这是默认值。                                          |
-| `dns`    | 使用 `addressResolver.dnsServers` 解析，例如 `["1.1.1.1", "8.8.8.8"]`。          |
-| `doh`    | 使用 `addressResolver.dohEndpoint` 解析，然后回退到 `addressResolver.dnsServers`。 |
-| `off`    | 不在生成的 Surge external proxy 条目中写入 `addresses=`。                         |
+| 策略     | 说明                                                                              |
+| -------- | --------------------------------------------------------------------------------- |
+| `doh`    | 用 `dohEndpoint`（默认 `https://1.1.1.1/dns-query`）解析，失败回退 `dnsServers`。**推荐**，绕开 Surge Fake-IP。 |
+| `dns`    | 用 `dnsServers`（如 `["1.1.1.1", "8.8.8.8"]`）解析。                              |
+| `system` | Node.js 系统 DNS。若 Surge 劫持了系统解析可能拿到 Fake-IP。                        |
+| `off`    | 完全不写入 `addresses=`。                                                         |
 
-`addressResolver.filterSurgeFakeIp` 默认为 `true`。它会在写入 `addresses=` 前过滤 `198.18.0.0/15` 地址，避免把 Surge fake-ip 结果固定到 external proxy 条目里。如果 Surge fake-ip DNS 影响了系统解析，可以设置 `"strategy": "doh"` 或 `"strategy": "dns"`。
+> **为什么默认用 DoH：** Surge 增强模式会把系统 DNS 劫持成 Fake-IP（`198.18.0.0/15`）。
+> 一旦这种假 IP 被写进代理的 `addresses=`，节点就连不上。DoH（或 `dns`）能解析出真实 IP。
+> `filterSurgeFakeIp`（默认 `true`）还会额外过滤掉任何 `198.18.x.x` 结果。
 
-也可以通过命令行参数临时覆盖：
+命令行临时覆盖：
 
 ```bash
-surge-vless-bridge sync --subscription-url https://example.com/sub --group-name VLESS
+surge-vless-bridge sync --subscription-url "https://a/sub,https://b/sub" --group-name VLESS
 ```
 
 ## 命令说明
 
-| 命令                         | 说明                                            |
-| ---------------------------- | ----------------------------------------------- |
-| `surge-vless-bridge init`    | 生成配置模板，自动检测默认值                    |
-| `surge-vless-bridge sync`    | 拉取订阅 → 生成 sing-box 配置 → 更新 Surge      |
-| `surge-vless-bridge rebuild` | 仅基于已有本地配置重建 Surge 区块（不访问网络） |
-| `surge-vless-bridge restore` | 恢复最近一次 Surge 配置备份                     |
-| `surge-vless-bridge doctor`  | 检查配置、路径及 Surge 必需区块是否正常         |
+| 命令                         | 说明                                                             |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `surge-vless-bridge init`    | 生成配置模板（已预填 DoH）                                       |
+| `surge-vless-bridge sync`    | 拉取订阅 → vless 走 sing-box + anytls 原生 → 更新 Surge          |
+| `surge-vless-bridge rebuild` | 仅用本地 sing-box 配置 + anytls 侧车重建区块（不访问网络）       |
+| `surge-vless-bridge restore` | 恢复最近一次（或指定的）Surge 配置备份                          |
+| `surge-vless-bridge doctor`  | 检查配置、路径、订阅数量及 Surge 必需区块                       |
 
 ---
 
 ## 本地开发
 
-面向参与贡献的开发者。
-
 ```bash
-git clone https://github.com/chen86860/surge-vless-bridge.git
+git clone <本仓库地址> surge-vless-bridge
 cd surge-vless-bridge
-npm install
+npm install          # 仅安装 tsc/tsx 等开发工具；无运行时依赖
 ```
 
-配置文件默认写入当前目录的 `.surge-vless-bridge.json`，而非全局路径。
-
-通过 `tsx` 直接运行源码，无需编译：
+在仓库目录里，配置默认写到当前目录的 `./.surge-vless-bridge.json`（而非全局路径）。
+用 `tsx` 直接跑源码、无需构建：
 
 ```bash
-npm run sync         # tsx src/cli.ts sync
-npm run doctor       # tsx src/cli.ts doctor
+npm run sync
+npm run doctor
 ```
 
-编译输出到 `dist/`：
+改完 `src/` 后重建已提交的 `dist/`：
 
 ```bash
 npm run build
+npm install -g .     # 用新构建重新安装全局命令
 ```

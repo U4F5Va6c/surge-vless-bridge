@@ -1,165 +1,186 @@
-# surge-vless-bridge
+# surge-vless-bridge (anytls fork)
 
-[![npm version](https://img.shields.io/npm/v/surge-vless-bridge.svg)](https://www.npmjs.com/package/surge-vless-bridge)
-[![npm downloads](https://img.shields.io/npm/dm/surge-vless-bridge.svg)](https://www.npmjs.com/package/surge-vless-bridge)
+[中文文档](./README.zh-CN.md) · [Modifications vs upstream](./MODIFICATIONS.md)
 
-[中文文档](./README.zh-CN.md)
+A Node.js CLI that turns a **Clash/mihomo (or legacy base64) subscription** into
+Surge Mac proxies:
 
-A Node.js CLI that converts a VLESS subscription into Surge Mac `external` proxy entries backed by local `sing-box` configs.
+- **vless (reality)** nodes → local `sing-box` configs exposed to Surge as
+  `external` proxies (Surge Mac has no native vless).
+- **anytls** nodes → **native Surge `anytls` proxies** written straight into the
+  profile (Surge Mac 6.4.3+ / iOS 5.17.0+ support anytls).
+- **Multiple subscriptions** are merged into one Surge policy group, with
+  automatic de-duplication of colliding node names.
 
-Surge Mac does not natively support VLESS. This tool bridges the gap: it fetches your subscription, generates a `sing-box` config per node, and keeps your Surge profile updated — so VLESS nodes work seamlessly through Surge's rules, policy groups, and dashboard.
+It fetches your subscription(s), generates the per-node artifacts, backs up your
+Surge profile, and rewrites a managed `# vless start … # vless end` block plus a
+policy group — so every node works through Surge's rules, groups, and dashboard.
+
+> This is a fork of [`chen86860/surge-vless-bridge`](https://github.com/chen86860/surge-vless-bridge)
+> that adds anytls, Clash-YAML parsing, and multi-subscription merging. See
+> [`MODIFICATIONS.md`](./MODIFICATIONS.md) for the full diff of behaviour.
 
 ## Prerequisites
 
-- [sing-box](https://github.com/SagerNet/sing-box) installed (`brew install sing-box`)
-- Surge Mac with a profile containing `[Proxy]` and `[Proxy Group]` sections
+- **Node.js ≥ 20**
+- **[sing-box](https://github.com/SagerNet/sing-box)** installed (`brew install sing-box`) — used for vless nodes
+- **Surge Mac 6.4.3+** with a profile containing `[Proxy]` and `[Proxy Group]` sections (needed for native anytls)
 
 ## Install
 
+This fork is **not published to npm**; install it from the repo. The package has
+**zero runtime dependencies** and ships a prebuilt `dist/`, so no build step is
+needed on the target machine:
+
 ```bash
-npm i -g surge-vless-bridge
+git clone <this-repo-url> surge-vless-bridge
+cd surge-vless-bridge
+npm install -g .
 ```
+
+Verify:
+
+```bash
+surge-vless-bridge version
+```
+
+> Copying the folder (without `node_modules/`) to another machine and running
+> `npm install -g .` works too — that's the intended way to reuse it.
+>
+> To hack on the source instead, see [Development](#development).
 
 ## Quick Start
 
-**1. Create a config file:**
+**1. Generate a config template** (already includes a sane `addressResolver` DoH block):
 
 ```bash
 surge-vless-bridge init
 ```
 
-This writes the config template to `~/.config/surge-vless-bridge/config.json` and prints the exact path.
+Writes `~/.config/surge-vless-bridge/config.json` and prints the exact path.
 
-**2. Edit the config file:**
+**2. Edit the config** — fill in your subscription(s) and Surge profile path:
 
-```bash
-# open the file printed by init, e.g.
-open ~/.config/surge-vless-bridge/config.json
-```
-
-Fill in at minimum:
-
-```json
+```jsonc
 {
-  "subscriptionUrl": "https://your-provider.com/subscription",
-  "surgeConfigPath": "/Users/you/Library/Application Support/Surge/Profiles/MyProfile.conf"
+  "subscriptionUrl": [
+    "https://your-provider.com/subscribe/token"
+  ],
+  "surgeConfigPath": "/Users/you/Library/Application Support/Surge/Profiles/MyProfile.conf",
+  "policyGroupName": "VLESS",
+  "portStart": 2081,
+  "addressResolver": { "strategy": "doh" }
 }
 ```
 
-- **`subscriptionUrl`**: Your VLESS subscription URL.
+- **`subscriptionUrl`** — one URL string, a comma-separated string, or an array
+  to merge several subscriptions.
+- **`surgeConfigPath`** — absolute path to your Surge profile. Find it via the
+  Surge menu-bar icon → **Switch Profile** → **Show in Finder**, or:
+  ```bash
+  ls ~/Library/Application\ Support/Surge/Profiles/
+  ```
 
-- **`surgeConfigPath`**: Absolute path to your Surge profile. To find it:
-  1. Click the Surge icon in the **macOS menu bar**
-  2. Go to **Switch Profile**, then click **Show in Finder** on your active profile
-  3. Press `⌘ + i` on the file in Finder and copy the full path including the filename
-
-  > Or list all profiles quickly in Terminal:
-  >
-  > ```bash
-  > ls ~/Library/Application\ Support/Surge/Profiles/
-  > ```
-
-**3. Run a sync:**
+**3. Sync:**
 
 ```bash
 surge-vless-bridge sync
+# → Synced 15 nodes (3 vless via sing-box, 12 anytls native).
 ```
 
-`sync` fetches the subscription, generates sing-box configs, backs up your Surge profile, and updates it.
-
-**4. Verify everything is correct:**
+**4. Reload the profile in Surge** (or quit & reopen) so it picks up the new
+proxies, then optionally check:
 
 ```bash
 surge-vless-bridge doctor
 ```
 
+## How nodes are routed
+
+| Subscription node type | Output |
+| ---------------------- | ------ |
+| `vless` (reality/tls)  | `sing-box[<port>].json` in `outputDir` + a Surge `external` proxy line with a DoH-resolved `addresses=` |
+| `anytls`               | A native Surge `Name = anytls, server, port, password=…, sni=…, skip-cert-verify=true` line |
+| other (ss/trojan/…)    | Skipped (reported in the `sync` summary) |
+
+anytls nodes have no sing-box config, so `sync` also records their lines in
+`<outputDir>/anytls-nodes.json`; `rebuild` reads that sidecar so it never drops
+them.
+
 ## Config File
 
-Created by `init`. Default path: `~/.config/surge-vless-bridge/config.json`.
-
-```json
-{
-  "subscriptionUrl": "https://example.com/subscription",
-  "surgeConfigPath": "/Users/you/Library/Application Support/Surge/Profiles/Config.conf",
-  "policyGroupName": "VLESS",
-  "portStart": 2081,
-  "addressResolver": {
-    "strategy": "system",
-    "filterSurgeFakeIp": true,
-    "dohEndpoint": "https://1.1.1.1/dns-query",
-    "dnsServers": ["1.1.1.1", "8.8.8.8"]
-  }
-}
-```
+Default path: `~/.config/surge-vless-bridge/config.json`.
 
 **Required**
 
-| Field             | Description                         |
-| ----------------- | ----------------------------------- |
-| `subscriptionUrl` | Your VLESS subscription URL         |
-| `surgeConfigPath` | Absolute path to your Surge profile |
+| Field             | Description                                                  |
+| ----------------- | ------------------------------------------------------------ |
+| `subscriptionUrl` | Subscription URL(s): string, comma-separated string, or array |
+| `surgeConfigPath` | Absolute path to your Surge profile                          |
 
 **Optional**
 
 | Field             | Default                                | Description                                            |
 | ----------------- | -------------------------------------- | ------------------------------------------------------ |
-| `policyGroupName` | `"VLESS"`                              | Surge policy group name to populate                    |
-| `portStart`       | `2081`                                 | Starting local port; each node uses the next available |
+| `policyGroupName` | `"VLESS"`                              | Surge `url-test` policy group to populate              |
+| `portStart`       | `2081`                                 | First local SOCKS port; each vless node takes the next |
 | `singBoxBinary`   | auto-detected via `which sing-box`     | Path to the `sing-box` binary                          |
-| `outputDir`       | `~/.config/surge-vless-bridge/nodes`   | Where per-node sing-box configs are written            |
+| `outputDir`       | `~/.config/surge-vless-bridge/nodes`   | Where sing-box configs + `anytls-nodes.json` are written |
 | `backupDir`       | `~/.config/surge-vless-bridge/backups` | Where Surge profile backups are stored                 |
-| `addressResolver` | see below                              | How to resolve proxy server domains for `addresses=`   |
+| `requestHeaders`  | Clash UA (`clash-verge/v1.7.0`)        | Headers used to fetch the subscription                 |
+| `addressResolver` | `{ "strategy": "doh" }` (from `init`)  | How proxy server domains are resolved for `addresses=` |
 
-`addressResolver.strategy` can be:
+`addressResolver.strategy`:
 
-| Strategy | Description                                                                                  |
-| -------- | -------------------------------------------------------------------------------------------- |
-| `system` | Use Node.js system DNS resolution. This is the default.                                       |
-| `dns`    | Resolve with `addressResolver.dnsServers`, such as `["1.1.1.1", "8.8.8.8"]`.                 |
-| `doh`    | Resolve with `addressResolver.dohEndpoint`, then fall back to `addressResolver.dnsServers`.   |
-| `off`    | Do not write `addresses=` in generated Surge external proxy entries.                          |
+| Strategy | Description                                                                                |
+| -------- | ------------------------------------------------------------------------------------------ |
+| `doh`    | Resolve via `dohEndpoint` (default `https://1.1.1.1/dns-query`), fall back to `dnsServers`. **Recommended** — avoids Surge Fake-IP. |
+| `dns`    | Resolve with `dnsServers` (e.g. `["1.1.1.1", "8.8.8.8"]`).                                  |
+| `system` | Node.js system DNS. May return Surge Fake-IP if Surge hijacks your resolver.                |
+| `off`    | Do not write `addresses=` at all.                                                          |
 
-`addressResolver.filterSurgeFakeIp` defaults to `true`. It filters `198.18.0.0/15` addresses before writing `addresses=`, avoiding Surge fake-ip results being pinned into external proxy entries. If Surge's fake-ip DNS affects your system resolver, set `"strategy": "doh"` or `"strategy": "dns"`.
+> **Why DoH is the default:** Surge's enhanced mode hijacks system DNS to
+> Fake-IP addresses (`198.18.0.0/15`). If those get pinned into a proxy's
+> `addresses=`, the node can't connect. DoH (or `dns`) resolves the real IP.
+> `filterSurgeFakeIp` (default `true`) additionally drops any `198.18.x.x` result.
 
-You can also override fields at runtime:
+Runtime overrides:
 
 ```bash
-surge-vless-bridge sync --subscription-url https://example.com/sub --group-name VLESS
+surge-vless-bridge sync --subscription-url "https://a/sub,https://b/sub" --group-name VLESS
 ```
 
 ## Commands
 
-| Command                      | Description                                                   |
-| ---------------------------- | ------------------------------------------------------------- |
-| `surge-vless-bridge init`    | Create a config template with detected defaults               |
-| `surge-vless-bridge sync`    | Fetch subscription → generate sing-box configs → update Surge |
-| `surge-vless-bridge rebuild` | Rebuild Surge block from existing local configs (no network)  |
-| `surge-vless-bridge restore` | Restore the latest Surge profile backup                       |
-| `surge-vless-bridge doctor`  | Validate config, paths, and required Surge markers            |
+| Command                      | Description                                                        |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `surge-vless-bridge init`    | Create a config template (with DoH pre-filled)                    |
+| `surge-vless-bridge sync`    | Fetch subscription(s) → vless via sing-box + anytls native → update Surge |
+| `surge-vless-bridge rebuild` | Rebuild the Surge block from local sing-box configs + anytls sidecar (no network) |
+| `surge-vless-bridge restore` | Restore the latest (or a given) Surge profile backup              |
+| `surge-vless-bridge doctor`  | Validate config, paths, subscription count, and Surge markers     |
 
 ---
 
 ## Development
 
-For contributors working on the source code.
-
 ```bash
-git clone https://github.com/chen86860/surge-vless-bridge.git
+git clone <this-repo-url> surge-vless-bridge
 cd surge-vless-bridge
-npm install
+npm install          # dev toolchain (tsc/tsx) only; no runtime deps
 ```
 
-Config file defaults to `.surge-vless-bridge.json` in the current directory, not the global path.
-
-Run commands directly via `tsx` without building:
+In a repo checkout the config defaults to `./.surge-vless-bridge.json` (not the
+global path). Run without building via `tsx`:
 
 ```bash
-npm run sync         # tsx src/cli.ts sync
-npm run doctor       # tsx src/cli.ts doctor
+npm run sync
+npm run doctor
 ```
 
-Build compiled output to `dist/`:
+Rebuild the committed `dist/` after editing `src/`:
 
 ```bash
 npm run build
+npm install -g .     # re-install the global command from the fresh build
 ```
