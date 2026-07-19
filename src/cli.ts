@@ -173,11 +173,16 @@ const main = async () => {
       }
       console.log(`Backup saved to ${result.backupPath}`);
       console.log(`Traffic panel script: ${result.trafficPanelPath}`);
-      console.log('  To show airport traffic in Surge, add to your profile:');
-      console.log('    [Panel]');
-      console.log('    AirportTraffic = script-name=AirportTraffic, update-interval=3600');
-      console.log('    [Script]');
-      console.log(`    AirportTraffic = type=generic, script-path=${result.trafficPanelPath}`);
+      if (result.panelInjected) {
+        console.log(`Injected [Panel]/[Script] into ${result.panelInjectPath} — reload Surge to see it.`);
+      } else {
+        console.log('  To show airport traffic in Surge, add to your profile:');
+        console.log('    [Panel]');
+        console.log('    AirportTraffic = script-name=AirportTraffic, update-interval=3600');
+        console.log('    [Script]');
+        console.log(`    AirportTraffic = type=generic, script-path=${result.trafficPanelPath}`);
+        console.log('  (or set "panelInjectPath" in your config to auto-inject the above.)');
+      }
       break;
     }
     case 'rebuild': {

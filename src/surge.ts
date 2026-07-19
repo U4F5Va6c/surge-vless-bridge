@@ -258,6 +258,49 @@ const updateProxyBlock = ({ surgeText, proxyLines }: { surgeText: string; proxyL
   });
 };
 
+/** Upsert a single `Key = ...` entry inside a named Surge section, creating the
+ * section at the end of the file if it is missing. Idempotent. */
+const upsertSectionEntry = (text: string, sectionName: string, entryKey: string, entryLine: string): string => {
+  const sectionHeader = `[${sectionName}]`;
+  const entryPattern = new RegExp(`^${escapeRegExp(entryKey)}\\s*=.*$`, 'm');
+
+  if (text.includes(sectionHeader)) {
+    const sectionPattern = new RegExp(`(\\[${escapeRegExp(sectionName)}\\])([\\s\\S]*?)(?=\\n\\[|$)`);
+    return text.replace(sectionPattern, (_match, title: string, body: string) => {
+      if (entryPattern.test(body)) {
+        return `${title}${body.replace(entryPattern, entryLine)}`;
+      }
+      return `${title}\n${entryLine}${body}`;
+    });
+  }
+
+  return `${text.replace(/\s*$/, '')}\n\n${sectionHeader}\n${entryLine}\n`;
+};
+
+const PANEL_ENTRY_KEY = 'AirportTraffic';
+const PANEL_ENTRY_LINE = `${PANEL_ENTRY_KEY} = script-name=${PANEL_ENTRY_KEY}, update-interval=3600`;
+
+/** Inject (or refresh) the traffic-panel [Panel]/[Script] entries into the
+ * configured Surge profile. Backs the file up first. */
+const injectPanelConfig = async (config: CliConfig, scriptPath: string): Promise<void> => {
+  const target = config.panelInjectPath;
+  if (!(await pathExists(target))) {
+    throw new Error(`panelInjectPath does not exist: ${target}`);
+  }
+
+  await mkdir(config.backupDir, { recursive: true });
+  const bytes = await readFile(target);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = join(config.backupDir, `${basename(target, '.conf')}-panel-${timestamp}.conf`);
+  await writeBinaryFile(backupPath, bytes);
+
+  const scriptLine = `${PANEL_ENTRY_KEY} = type=generic, script-path=${scriptPath}`;
+  let text = bytes.toString('utf8');
+  text = upsertSectionEntry(text, 'Script', PANEL_ENTRY_KEY, scriptLine);
+  text = upsertSectionEntry(text, 'Panel', PANEL_ENTRY_KEY, PANEL_ENTRY_LINE);
+  await writeTextFile(target, text);
+};
+
 const writeSurgeProfile = async ({
   config,
   proxyLines,
@@ -378,6 +421,13 @@ export const syncSubscriptionToSurge = async (config: CliConfig) => {
   const trafficPanelPath = join(config.outputDir, TRAFFIC_PANEL_FILE);
   await writeTextFile(trafficPanelPath, buildAirportTrafficScript(subscriptionUrls));
 
+  // If an inject target is configured, auto-add the [Panel]/[Script] entries.
+  let panelInjected = false;
+  if (config.panelInjectPath) {
+    await injectPanelConfig(config, trafficPanelPath);
+    panelInjected = true;
+  }
+
   if (collected.skipped.length > 0) {
     const types = [...new Set(collected.skipped.map((item) => item.type))].join(', ');
     console.warn(`Skipped ${collected.skipped.length} unsupported node(s): ${types}`);
@@ -386,6 +436,8 @@ export const syncSubscriptionToSurge = async (config: CliConfig) => {
   return {
     backupPath,
     trafficPanelPath,
+    panelInjected,
+    panelInjectPath: config.panelInjectPath,
     count: nodeNames.length,
     vlessCount: generated.nodeNames.length,
     anytlsCount: anytlsEntries.length,

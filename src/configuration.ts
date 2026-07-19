@@ -99,6 +99,7 @@ export const getDefaultConfig = async (_cwd: string): Promise<CliConfig> => {
     policyGroupName: 'VLESS',
     proxyStartMarker: '# vless start',
     proxyEndMarker: '# vless end',
+    panelInjectPath: '',
     portStart: 2081,
     subscriptionOutputPath: join(stateDir, 'vless_nodes.txt'),
     requestHeaders: { ...DEFAULT_HEADERS },
@@ -211,6 +212,9 @@ export const writeExampleConfig = async ({
     surgeConfigPath: defaults.surgeConfigPath,
     policyGroupName: defaults.policyGroupName,
     portStart: defaults.portStart,
+    // Set to a Surge .conf path to auto-inject the traffic panel's
+    // [Panel]/[Script] entries there; leave empty to only print the snippet.
+    panelInjectPath: '',
     // DoH avoids Surge's enhanced-mode Fake-IP (198.18.x.x) so the real server
     // IP is written into each external proxy's `addresses=`.
     addressResolver: { strategy: 'doh' },

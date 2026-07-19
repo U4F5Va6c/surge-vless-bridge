@@ -16,6 +16,9 @@ export type CliConfig = {
   policyGroupName: string;
   proxyStartMarker: string;
   proxyEndMarker: string;
+  /** Optional path to a Surge .conf to auto-inject the traffic panel's
+   * [Panel]/[Script] entries into. Empty string = only print the snippet. */
+  panelInjectPath: string;
   portStart: number;
   subscriptionOutputPath: string;
   requestHeaders: Record<string, string>;

@@ -32,6 +32,9 @@
    - 订阅 URL 只注入本地生成文件（私有），**不进仓库**；仓库里只有生成器。
    - 在 Surge 配置里加 `[Panel]` + `[Script]`（`type=generic`）即可挂载，
      `sync` 结束会打印需要粘贴的配置行。
+   - 配置项 `panelInjectPath`：填一个 Surge `.conf` 路径后，`sync` 会**自动
+     幂等注入** `[Panel]`/`[Script]` 到该文件（注入前先备份，保留原有脚本）；
+     留空则仅打印提示。
 
 ## 配置示例（`~/.config/surge-vless-bridge/config.json`）
 

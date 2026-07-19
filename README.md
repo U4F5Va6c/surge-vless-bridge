@@ -118,7 +118,8 @@ each airport by its `content-disposition` filename.
 Your private subscription URLs are baked only into this generated local file —
 never into the repo (which ships just the generator).
 
-To enable it, add the lines `sync` prints to your Surge profile:
+To enable it, either add the lines `sync` prints to your Surge profile, or set
+`panelInjectPath` in your config to have `sync` inject them automatically:
 
 ```ini
 [Panel]
@@ -127,6 +128,11 @@ AirportTraffic = script-name=AirportTraffic, update-interval=3600
 [Script]
 AirportTraffic = type=generic, script-path=/Users/you/.config/surge-vless-bridge/nodes/airport-traffic.js
 ```
+
+With `"panelInjectPath": "/path/to/Active.conf"`, every `sync` upserts these two
+entries into that profile idempotently (backing it up first, preserving existing
+scripts). Point it at your **active** profile — panels only display from the
+profile Surge actually loads.
 
 ## Config File
 
@@ -149,6 +155,7 @@ Default path: `~/.config/surge-vless-bridge/config.json`.
 | `outputDir`       | `~/.config/surge-vless-bridge/nodes`   | Where sing-box configs + `anytls-nodes.json` are written |
 | `backupDir`       | `~/.config/surge-vless-bridge/backups` | Where Surge profile backups are stored                 |
 | `requestHeaders`  | Clash UA (`clash-verge/v1.7.0`)        | Headers used to fetch the subscription                 |
+| `panelInjectPath` | `""` (off)                             | Surge `.conf` to auto-inject the traffic panel's `[Panel]`/`[Script]` into; empty = just print the snippet |
 | `addressResolver` | `{ "strategy": "doh" }` (from `init`)  | How proxy server domains are resolved for `addresses=` |
 
 `addressResolver.strategy`:
