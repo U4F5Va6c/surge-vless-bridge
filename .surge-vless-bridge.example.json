@@ -1,0 +1,12 @@
+{
+  "subscriptionUrl": "https://example.com/subscription",
+  "surgeConfigPath": "/Users/you/Library/Application Support/Surge/Profiles/Config.conf",
+  "policyGroupName": "VLESS",
+  "portStart": 2081,
+  "addressResolver": {
+    "strategy": "system",
+    "filterSurgeFakeIp": true,
+    "dohEndpoint": "https://1.1.1.1/dns-query",
+    "dnsServers": ["1.1.1.1", "8.8.8.8"]
+  }
+}

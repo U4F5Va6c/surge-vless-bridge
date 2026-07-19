@@ -1,0 +1,40 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+*.tgz
+# NOTE: dist/ is intentionally committed so the package can be copied/cloned to
+# another machine and installed with `npm install -g .` without a build step
+# (this package has zero runtime dependencies).
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# local CLI config and generated state
+.surge-vless-bridge.json
+.surge-vless-bridge/
