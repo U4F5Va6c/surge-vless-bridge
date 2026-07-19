@@ -107,6 +107,27 @@ anytls nodes have no sing-box config, so `sync` also records their lines in
 `<outputDir>/anytls-nodes.json`; `rebuild` reads that sidecar so it never drops
 them.
 
+## Airport traffic panel (optional)
+
+`sync` also writes `<outputDir>/airport-traffic.js` — a Surge panel script that
+shows each subscription's traffic usage (used / total / expiry) in the Surge
+dashboard. It re-fetches the subscription with a Clash UA to read the
+`subscription-userinfo` header (some panels hide it from Surge's UA), and labels
+each airport by its `content-disposition` filename.
+
+Your private subscription URLs are baked only into this generated local file —
+never into the repo (which ships just the generator).
+
+To enable it, add the lines `sync` prints to your Surge profile:
+
+```ini
+[Panel]
+AirportTraffic = script-name=AirportTraffic, update-interval=3600
+
+[Script]
+AirportTraffic = type=generic, script-path=/Users/you/.config/surge-vless-bridge/nodes/airport-traffic.js
+```
+
 ## Config File
 
 Default path: `~/.config/surge-vless-bridge/config.json`.

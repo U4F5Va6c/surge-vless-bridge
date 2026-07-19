@@ -10,6 +10,10 @@ import { parseTemplate } from './utils/parse-template';
 import { pathExists, readJsonFile, readTextFile, writeBinaryFile, writeTextFile } from './utils/fs';
 import { buildAnyTlsLine } from './utils/build-anytls-line';
 import { uniquePolicyName } from './utils/policy-name';
+import { buildAirportTrafficScript } from './utils/panel-script';
+
+/** Filename of the generated Surge traffic-panel script inside `outputDir`. */
+const TRAFFIC_PANEL_FILE = 'airport-traffic.js';
 
 const DOH_RECORD_TYPES = {
   A: 1,
@@ -369,6 +373,11 @@ export const syncSubscriptionToSurge = async (config: CliConfig) => {
   const backupPath = await backupSurgeProfile(config);
   await writeSurgeProfile({ config, proxyLines, nodeNames });
 
+  // Generate a Surge panel script (with the private URLs) so the airport's
+  // traffic usage can be shown in the Surge dashboard.
+  const trafficPanelPath = join(config.outputDir, TRAFFIC_PANEL_FILE);
+  await writeTextFile(trafficPanelPath, buildAirportTrafficScript(subscriptionUrls));
+
   if (collected.skipped.length > 0) {
     const types = [...new Set(collected.skipped.map((item) => item.type))].join(', ');
     console.warn(`Skipped ${collected.skipped.length} unsupported node(s): ${types}`);
@@ -376,6 +385,7 @@ export const syncSubscriptionToSurge = async (config: CliConfig) => {
 
   return {
     backupPath,
+    trafficPanelPath,
     count: nodeNames.length,
     vlessCount: generated.nodeNames.length,
     anytlsCount: anytlsEntries.length,

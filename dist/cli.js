@@ -142,6 +142,12 @@ const main = async () => {
                 console.log(`Skipped ${result.skippedCount} unsupported node(s).`);
             }
             console.log(`Backup saved to ${result.backupPath}`);
+            console.log(`Traffic panel script: ${result.trafficPanelPath}`);
+            console.log('  To show airport traffic in Surge, add to your profile:');
+            console.log('    [Panel]');
+            console.log('    AirportTraffic = script-name=AirportTraffic, update-interval=3600');
+            console.log('    [Script]');
+            console.log(`    AirportTraffic = type=generic, script-path=${result.trafficPanelPath}`);
             break;
         }
         case 'rebuild': {

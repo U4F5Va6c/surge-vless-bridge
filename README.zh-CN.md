@@ -97,6 +97,25 @@ surge-vless-bridge doctor
 anytls 没有独立的 sing-box 配置，因此 `sync` 会把它们的行额外记录到
 `<outputDir>/anytls-nodes.json`；`rebuild` 会读取该侧车文件，保证不丢失。
 
+## 机场流量面板（可选）
+
+`sync` 还会生成 `<outputDir>/airport-traffic.js` —— 一个 Surge 面板脚本，在 Surge
+仪表盘显示每个订阅的流量使用（已用 / 总额 / 到期）。它用 Clash UA 重新拉订阅、
+读取 `subscription-userinfo` 头（有的面板对 Surge UA 不回传该头），机场名自动取自
+`content-disposition`。
+
+你的私有订阅 URL 只会写进这个本地生成文件，**不会进入仓库**（仓库里只有生成器）。
+
+启用方式：把 `sync` 打印的配置行加到你的 Surge 配置里：
+
+```ini
+[Panel]
+AirportTraffic = script-name=AirportTraffic, update-interval=3600
+
+[Script]
+AirportTraffic = type=generic, script-path=/Users/you/.config/surge-vless-bridge/nodes/airport-traffic.js
+```
+
 ## 配置文件
 
 默认路径：`~/.config/surge-vless-bridge/config.json`。

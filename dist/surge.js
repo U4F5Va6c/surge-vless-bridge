@@ -10,6 +10,9 @@ const parse_template_1 = require("./utils/parse-template");
 const fs_1 = require("./utils/fs");
 const build_anytls_line_1 = require("./utils/build-anytls-line");
 const policy_name_1 = require("./utils/policy-name");
+const panel_script_1 = require("./utils/panel-script");
+/** Filename of the generated Surge traffic-panel script inside `outputDir`. */
+const TRAFFIC_PANEL_FILE = 'airport-traffic.js';
 const DOH_RECORD_TYPES = {
     A: 1,
     AAAA: 28,
@@ -242,12 +245,17 @@ const syncSubscriptionToSurge = async (config) => {
     }
     const backupPath = await (0, exports.backupSurgeProfile)(config);
     await writeSurgeProfile({ config, proxyLines, nodeNames });
+    // Generate a Surge panel script (with the private URLs) so the airport's
+    // traffic usage can be shown in the Surge dashboard.
+    const trafficPanelPath = (0, node_path_1.join)(config.outputDir, TRAFFIC_PANEL_FILE);
+    await (0, fs_1.writeTextFile)(trafficPanelPath, (0, panel_script_1.buildAirportTrafficScript)(subscriptionUrls));
     if (collected.skipped.length > 0) {
         const types = [...new Set(collected.skipped.map((item) => item.type))].join(', ');
         console.warn(`Skipped ${collected.skipped.length} unsupported node(s): ${types}`);
     }
     return {
         backupPath,
+        trafficPanelPath,
         count: nodeNames.length,
         vlessCount: generated.nodeNames.length,
         anytlsCount: anytlsEntries.length,
