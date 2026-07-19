@@ -28,7 +28,7 @@
     "surge-vless-bridge": "./dist/cli.js"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json && chmod +x dist/cli.js",
     "init": "tsx src/cli.ts init",
     "sync": "tsx src/cli.ts sync",
     "rebuild": "tsx src/cli.ts rebuild",
